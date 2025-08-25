@@ -33,37 +33,14 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y rsync
 
-      - name: Configurar clave SSH con passphrase (ed25519)
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
-          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          # Guardar la clave
-          cat > ~/.ssh/deploy_key <<'EOF'
-          ${SSH_PRIVATE_KEY}
-          EOF
-          chmod 600 ~/.ssh/deploy_key
-          # Script askpass que entrega la passphrase
-          cat > askpass.sh <<'EOF'
-          #!/usr/bin/env bash
-          echo "$SSH_PASSPHRASE"
-          EOF
-          chmod 700 askpass.sh
-          # Iniciar agente y cargar clave usando SSH_ASKPASS (sin intervención)
-          eval "$(ssh-agent -s)"
-          export SSH_ASKPASS=$PWD/askpass.sh
-          export DISPLAY=:0
-          setsid ssh-add ~/.ssh/deploy_key < /dev/null
-          # Desactivar strict host key checking solo para este host
-          printf "Host %s\n  StrictHostKeyChecking no\n  UserKnownHostsFile=/dev/null\n" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-          ssh-add -l
+      - name: Cargar clave RSA (sin passphrase)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Copiar al servidor (rsync)
         run: |
-          rsync -az --delete -e "ssh" \
+          rsync -az --delete -e "ssh -o StrictHostKeyChecking=no" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='node_modules' \
@@ -71,6 +48,6 @@ jobs:
             --exclude='LICENSE' \
             . ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}
 
-      - name: Prueba de conexión final
+      - name: Prueba rápida
         run: |
-          ssh -o BatchMode=yes ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'Conexión OK'"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'OK RSA'"
